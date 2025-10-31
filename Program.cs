@@ -70,7 +70,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 // --- Configurar CORS ---
-// Puedes agregar más orígenes separados por comas si lo necesitas (por ejemplo, frontend en producción)
+// ✅ 1. AQUÍ SE DEFINE LA POLÍTICA CORRECTAMENTE
+// Esta configuración permite que tu app de Angular en "http://localhost:4200"
+// pueda hacer cualquier tipo de petición (GET, POST, PUT, DELETE)
+// y enviar cualquier encabezado (como el 'Authorization' para tu JWT).
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
@@ -78,7 +81,8 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("http://localhost:4200")  // Angular local
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials(); // Permite envío de cookies/tokens si usas credenciales
+              .AllowCredentials()
+              .WithExposedHeaders("Content-Disposition"); // Permite envío de cookies/tokens si usas credenciales
     });
 });
 
@@ -91,7 +95,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// ✅ CORS debe ir antes de Authentication/Authorization
+// ✅ 2. AQUÍ SE USA LA POLÍTICA EN EL ORDEN CORRECTO
+// Se aplica CORS antes de la Autenticación y Autorización.
+// Esto es fundamental para que las peticiones de Angular no sean bloqueadas.
 app.UseCors("AllowAngular");
 
 app.UseHttpsRedirection();
@@ -101,3 +107,4 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+

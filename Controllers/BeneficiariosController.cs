@@ -1,15 +1,19 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using OfficeOpenXml;
+using OfficeOpenXml; // Asegúrate de tener este using
 using Pension65Api.Data;
 using Pension65Api.Models;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+
+// ✅ ELIMINAMOS EL USING DUPLICADO
 
 namespace Pension65Api.Controllers
 {
@@ -119,151 +123,183 @@ namespace Pension65Api.Controllers
 
         // ✅ Exportar a Excel (EPPlus)
         [HttpGet("export/excel")]
+        [AllowAnonymous]
         public IActionResult ExportExcel()
         {
-            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-            using var package = new ExcelPackage();
-            var ws = package.Workbook.Worksheets.Add("Beneficiarios");
-
-            // Cabeceras
-            ws.Cells["A1"].Value = "DNI";
-            ws.Cells["B1"].Value = "Nombres";
-            ws.Cells["C1"].Value = "Edad";
-            ws.Cells["D1"].Value = "Distrito";
-            ws.Cells["E1"].Value = "EstadoPago";
-
-            // Datos
-            var list = _context.Beneficiarios.ToList();
-            int row = 2;
-            foreach (var b in list)
+            try
             {
-                ws.Cells[row, 1].Value = b.DNI;
-                ws.Cells[row, 2].Value = b.Nombres;
-                ws.Cells[row, 3].Value = b.Edad;
-                ws.Cells[row, 4].Value = b.Distrito;
-                ws.Cells[row, 5].Value = b.EstadoPago;
-                row++;
+                // ✅ REVERSIÓN 1: Volvemos al código "obsoleto" (pero que compila)
+                ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+                using var package = new ExcelPackage();
+                var ws = package.Workbook.Worksheets.Add("Beneficiarios");
+
+                // Cabeceras
+                ws.Cells["A1"].Value = "DNI";
+                ws.Cells["B1"].Value = "Nombres";
+                ws.Cells["C1"].Value = "Edad";
+                ws.Cells["D1"].Value = "Distrito";
+                ws.Cells["E1"].Value = "EstadoPago";
+
+                // Datos
+                var list = _context.Beneficiarios.ToList();
+                int row = 2;
+                foreach (var b in list)
+                {
+                    ws.Cells[row, 1].Value = b.DNI;
+                    ws.Cells[row, 2].Value = b.Nombres;
+                    ws.Cells[row, 3].Value = b.Edad;
+                    ws.Cells[row, 4].Value = b.Distrito;
+                    ws.Cells[row, 5].Value = b.EstadoPago;
+                    row++;
+                }
+
+                ws.Cells.AutoFitColumns();
+
+                var stream = new MemoryStream(package.GetAsByteArray());
+                return File(stream,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "Beneficiarios.xlsx");
             }
-
-            ws.Cells.AutoFitColumns();
-
-            var stream = new MemoryStream(package.GetAsByteArray());
-            return File(stream,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "Beneficiarios.xlsx");
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error interno al generar Excel: {ex.Message} \nStackTrace: {ex.StackTrace}");
+            }
         }
 
-        // ✅ Exportar a PDF (QuestPDF)
+           // ✅ Exportar a PDF (QuestPDF)
         [HttpGet("export/pdf")]
+        [AllowAnonymous]
         public IActionResult ExportPdf()
         {
-            var beneficiarios = _context.Beneficiarios.ToList();
-
-            using var stream = new MemoryStream();
-
-            Document.Create(container =>
+            try
             {
-                container.Page(page =>
+                // 💎 ¡ESTA ES LA LÍNEA QUE SOLUCIONA EL ERROR! 💎
+                // Las versiones nuevas de QuestPDF requieren que se establezca la licencia,
+                // incluso la gratuita "Community".
+                QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
+                var beneficiarios = _context.Beneficiarios.ToList();
+
+                using var stream = new MemoryStream();
+
+                Document.Create(container =>
                 {
-                    page.Size(PageSizes.A4);
-                    page.Margin(40);
-                    page.PageColor(Colors.White);
-
-                    // 🔹 Encabezado
-                    page.Header().Row(row =>
+                    container.Page(page =>
                     {
-                        row.RelativeColumn().Stack(stack =>
+                        page.Size(PageSizes.A4);
+                        page.Margin(40);
+                        page.PageColor(Colors.White);
+
+                        // 🔹 Encabezado
+                        page.Header().Row(row =>
                         {
-                            stack.Item().Text("Programa Pensión 65")
-                                .FontSize(16)
-                                .Bold()
-                                .FontColor("#1976D2");
+                            // Usamos el código "obsoleto" (amarillo) porque es el que compila
+                            row.RelativeColumn().Stack(stack =>
+                            {
+                                stack.Item().Text("Programa Pensión 65")
+                                    .FontSize(16)
+                                    .Bold()
+                                    .FontColor("#1976D2");
 
-                            stack.Item().Text("Reporte de Beneficiarios")
-                                .FontSize(11)
-                                .FontColor("#333333");
+                                stack.Item().Text("Reporte de Beneficiarios")
+                                    .FontSize(11)
+                                    .FontColor("#333333");
 
-                            stack.Item().Text($"Generado: {DateTime.Now:dd/MM/yyyy HH:mm}")
-                                .FontSize(9)
-                                .FontColor("#555555");
-                        });
-                    });
-
-                    // 🔹 Contenido principal (tabla)
-                    page.Content().Table(table =>
-                    {
-                        table.ColumnsDefinition(columns =>
-                        {
-                            columns.ConstantColumn(80);
-                            columns.RelativeColumn(2);
-                            columns.ConstantColumn(50);
-                            columns.RelativeColumn();
-                            columns.RelativeColumn();
+                                stack.Item().Text($"Generado: {DateTime.Now:dd/MM/yyyy HH:mm}")
+                                    .FontSize(9)
+                                    .FontColor("#555555");
+                            });
                         });
 
-                        // Cabecera
-                        table.Header(header =>
+                        // 🔹 Contenido principal (tabla)
+                        page.Content().Table(table =>
                         {
-                            header.Cell().Element(CellHeader).Text("DNI");
-                            header.Cell().Element(CellHeader).Text("Nombres");
-                            header.Cell().Element(CellHeader).Text("Edad");
-                            header.Cell().Element(CellHeader).Text("Distrito");
-                            header.Cell().Element(CellHeader).Text("Estado Pago");
+                            table.ColumnsDefinition(columns =>
+                            {
+                                // Usamos el código "obsoleto" (amarillo)
+                                columns.ConstantColumn(80);
+                                columns.RelativeColumn(2);
+                                columns.ConstantColumn(50);
+                                columns.RelativeColumn();
+                                columns.RelativeColumn();
+                            });
 
-                            static IContainer CellHeader(IContainer container)
+                            // Cabecera
+                            table.Header(header =>
+                            {
+                                header.Cell().Element(CellHeader).Text("DNI");
+                                header.Cell().Element(CellHeader).Text("Nombres");
+                                header.Cell().Element(CellHeader).Text("Edad");
+                                header.Cell().Element(CellHeader).Text("Distrito");
+// ... (código sin cambios) ...
+                                header.Cell().Element(CellHeader).Text("Estado Pago");
+
+                                static IContainer CellHeader(IContainer container)
+                                {
+                                    return container
+                                        .Background("#1976D2")
+// ... (código sin cambios) ...
+                                        .Padding(5)
+                                        .DefaultTextStyle(x => x.FontSize(10).FontColor("#FFFFFF"))
+                                        .AlignCenter();
+                                }
+                            });
+
+                            // Filas
+                            foreach (var b in beneficiarios)
+                            {
+                                table.Cell().Element(CellBody).Text(b.DNI);
+// ... (código sin cambios) ...
+                                table.Cell().Element(CellBody).Text(b.Nombres);
+                                table.Cell().Element(CellBody).Text(b.Edad.ToString());
+                                table.Cell().Element(CellBody).Text(b.Distrito);
+                                table.Cell().Element(CellBody).Text(b.EstadoPago);
+                            }
+
+                            static IContainer CellBody(IContainer container)
                             {
                                 return container
-                                    .Background("#1976D2")
+// ... (código sin cambios) ...
                                     .Padding(5)
-                                    .DefaultTextStyle(x => x.FontSize(10).FontColor("#FFFFFF"))
-                                    .AlignCenter();
+                                    .BorderBottom(0.5f)
+                                    .BorderColor("#DDDDDD")
+                                    .DefaultTextStyle(x => x.FontSize(9));
                             }
                         });
 
-                        // Filas
-                        foreach (var b in beneficiarios)
+                        // 🔹 Totales al final
+                        page.Content().PaddingTop(10).AlignRight().Text(txt =>
                         {
-                            table.Cell().Element(CellBody).Text(b.DNI);
-                            table.Cell().Element(CellBody).Text(b.Nombres);
-                            table.Cell().Element(CellBody).Text(b.Edad.ToString());
-                            table.Cell().Element(CellBody).Text(b.Distrito);
-                            table.Cell().Element(CellBody).Text(b.EstadoPago);
-                        }
+// ... (código sin cambios) ...
+                            var total = beneficiarios.Count;
+                            txt.Span($"Total de beneficiarios: {total}")
+                                .FontSize(10)
+                                .Bold()
+                                .FontColor("#333333");
+                        });
 
-                        static IContainer CellBody(IContainer container)
+                        // 🔹 Pie de página
+                        page.Footer().AlignRight().Text(txt =>
                         {
-                            return container
-                                .Padding(5)
-                                .BorderBottom(0.5f)
-                                .BorderColor("#DDDDDD")
-                                .DefaultTextStyle(x => x.FontSize(9));
-                        }
+// ... (código sin cambios) ...
+                            txt.Span("Página ");
+                            txt.CurrentPageNumber();
+                            txt.Span(" de ");
+                            txt.TotalPages();
+                        });
                     });
+                }).GeneratePdf(stream);
 
-                    // 🔹 Totales al final
-                    page.Content().PaddingTop(10).AlignRight().Text(txt =>
-                    {
-                        var total = beneficiarios.Count;
-                        txt.Span($"Total de beneficiarios: {total}")
-                           .FontSize(10)
-                           .Bold()
-                           .FontColor("#333333");
-                    });
-
-                    // 🔹 Pie de página
-                    page.Footer().AlignRight().Text(txt =>
-                    {
-                        txt.Span("Página ");
-                        txt.CurrentPageNumber();
-                        txt.Span(" de ");
-                        txt.TotalPages();
-                    });
-                });
-            }).GeneratePdf(stream);
-
-            stream.Position = 0;
-            return File(stream.ToArray(), "application/pdf", "Beneficiarios.pdf");
+                stream.Position = 0;
+                return File(stream.ToArray(), "application/pdf", "Beneficiarios.pdf");
+            }
+            catch (Exception ex)
+            {
+                // ESTO CAPTURARÁ EL ERROR Y LO ENVIARÁ A ANGULAR
+                return StatusCode(500, $"Error interno al generar PDF: {ex.Message} \nStackTrace: {ex.StackTrace}");
+            }
         }
     }
 }
+
